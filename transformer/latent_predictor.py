@@ -152,7 +152,7 @@ class LatentPredictor(nn.Module):
         current_frame_tokens = current_frame_indices.view(B, -1)
         current_frame_embeds = self.embed_tokens(current_frame_tokens)
         
-        # --- FIX #1: Correctly apply positional encoding to the input frame ---
+     
         pos_encoding = self._get_positional_encoding(self.row_pos_embeddings, self.col_pos_embeddings)
         current_frame_with_pos = self.dropout(current_frame_embeds + pos_encoding)
         
@@ -181,11 +181,11 @@ class LatentPredictor(nn.Module):
         initial_input = torch.full((B, self.seq_len), self.mask_token_id, dtype=torch.long, device=device)
         x = self.embed_tokens(initial_input)
 
-        # --- FIX #2: Cleaned up and corrected output positional encoding ---
+    
         pos_encoding = self._get_positional_encoding(self.next_row_pos_embeddings, self.next_col_pos_embeddings)
         x = self.dropout(x + pos_encoding)
         
-        # Pass through alternating layers
+        
         context_idx = 0
         for layer in self.layers:
             if isinstance(layer, SelfAttentionBlock):
@@ -215,13 +215,13 @@ class LatentPredictor(nn.Module):
         predicted_tokens = torch.full((B, self.seq_len), self.mask_token_id, dtype=torch.long, device=device)
         mask = torch.ones(B, self.seq_len, dtype=torch.bool, device=device)
 
-        # --- FIX #3: Get output positional encoding once outside the loop ---
+      
         pos_encoding = self._get_positional_encoding(self.next_row_pos_embeddings, self.next_col_pos_embeddings)
 
         for iteration in range(num_iterations):
             x = self.embed_tokens(predicted_tokens) + pos_encoding
 
-            # Forward pass through layers
+           
             context_idx = 0
             for layer in self.layers:
                 if isinstance(layer, SelfAttentionBlock):
@@ -233,7 +233,7 @@ class LatentPredictor(nn.Module):
             x = self.norm(x)
             logits = self.lm_head(x)
             
-            # Decoding logic... (This part was okay)
+          
             probs = F.softmax(logits / temperature, dim=-1)
             confidences, predictions = torch.max(probs, dim=-1)
 
@@ -281,19 +281,18 @@ class LatentPredictor(nn.Module):
                                       dtype=torch.long, device=device)
         mask = torch.ones(B, self.seq_len, dtype=torch.bool, device=device)
         
-        # --- FIX #1: Calculate positional encoding ONCE before the loop ---
+       
         row_pos = self.next_row_pos_embeddings.unsqueeze(2)
         col_pos = self.next_col_pos_embeddings.unsqueeze(1)
         
-        # --- FIX #2: Use self.seq_len which is already defined (H * W) ---
+        # Use self.seq_len which is already defined (H * W) 
         pos_encoding = (row_pos + col_pos).view(1, self.seq_len, self.hidden_size)
         
         # Iterative decoding
         for iteration in range(num_iterations):
-            # --- FIX #3: Efficiently add the pre-calculated encoding ---
+       
             x = self.embed_tokens(predicted_tokens) + pos_encoding
             
-            # Forward pass through alternating layers
             total_contexts = len(contexts)
             context_idx = 0
             
@@ -310,18 +309,18 @@ class LatentPredictor(nn.Module):
             probs = F.softmax(logits, dim=-1)
             confidences, predictions = torch.max(probs, dim=-1)
             
-            # Calculate masking ratio based on schedule
+           
             t = (iteration + 1) / num_iterations
             if schedule == 'cosine':
                 mask_ratio = np.cos(t * np.pi / 2)
             elif schedule == 'square':
                 mask_ratio = 1 - t ** 2
-            else:  # linear
+            else:  
                 mask_ratio = 1 - t
             
             target_num_masked = int(self.seq_len * mask_ratio)
             
-            # Reveal tokens based on confidence
+         
             tokens_to_keep = torch.zeros_like(mask)
             masked_confidences = confidences.clone()
             masked_confidences[~mask] = -1
